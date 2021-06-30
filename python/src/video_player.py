@@ -17,6 +17,7 @@ class VideoPlayer:
     paused = False
     playlists = {}
     playlists = CaseInsensitiveDict(playlists)
+    flags = {}
 
     def __init__(self):
         self._video_library = VideoLibrary()
@@ -24,6 +25,7 @@ class VideoPlayer:
         self.paused = False
         self.playlists = {}
         self.playlists = CaseInsensitiveDict(self.playlists)
+        self.flags = {}
 
     def number_of_videos(self):
         num_videos = len(self._video_library.get_all_videos())
@@ -34,7 +36,12 @@ class VideoPlayer:
         print("Here's a list of all available videos:")
         videos = self._video_library.get_all_videos()
         videos.sort(key = lambda x: x.title)
-        for video in videos: print(f"  {video.title} ({video.video_id}) [{get_tags_formatted(video)}]")
+        for video in videos: 
+            flag = self.flags.get(video.video_id)
+            if flag == None:
+                print(f"  {video.title} ({video.video_id}) [{get_tags_formatted(video)}]")
+            else:
+                print(f"  {video.title} ({video.video_id}) [{get_tags_formatted(video)}] - FLAGGED (reason: {flag})")
         #print("show_all_videos needs implementation")
 
     def play_video(self, video_id):
@@ -43,6 +50,10 @@ class VideoPlayer:
         Args:
             video_id: The video_id to be played.
         """
+        flag = self.flags.get(video_id, None)
+        if flag != None:
+            print(f"Cannot play video: Video is currently flagged (reason: {flag})")
+            return
         video = self._video_library.get_video(video_id)
         if video == None: # if the video ID is invalid
             print("Cannot play video: Video does not exist")
@@ -69,7 +80,11 @@ class VideoPlayer:
         """Plays a random video from the video library."""
         all_vids = self._video_library.get_all_videos() 
         all_vids = list(map(lambda x: x.video_id, all_vids))
-        self.play_video(random.choice(all_vids))
+        good_vids = list(filter(lambda x: self.flags.get(x, None) == None, all_vids))
+        if len(good_vids) == 0:
+            print("No videos available")
+            return
+        self.play_video(random.choice(good_vids))
         #print("play_random_video needs implementation")
 
     def pause_video(self):
@@ -131,6 +146,11 @@ class VideoPlayer:
             playlist_name: The playlist name.
             video_id: The video_id to be added.
         """
+        flag = self.flags.get(video_id, None)
+        if flag != None:
+            print(f"Cannot add video to {playlist_name}: Video is currently flagged (reason: {flag})")
+            return
+
         playlist = self.playlists.get(playlist_name, None)
         if playlist == None:
             print(f"Cannot add video to {playlist_name}: Playlist does not exist")
@@ -169,7 +189,11 @@ class VideoPlayer:
             else:
                 for video_id in playlist.videos:
                     video = self._video_library.get_video(video_id)
-                    print(f"  {video.title} ({video_id}) [{get_tags_formatted(video)}]")
+                    flag = self.flags.get(video_id)
+                    if flag == None:
+                        print(f"  {video.title} ({video_id}) [{get_tags_formatted(video)}]")
+                    else:
+                        print(f"  {video.title} ({video.video_id}) [{get_tags_formatted(video)}] - FLAGGED (reason: {flag})")
         #print("show_playlist needs implementation")
 
     def remove_from_playlist(self, playlist_name, video_id):
@@ -231,11 +255,24 @@ class VideoPlayer:
             search_term: The query to be used in search.
         """
         videos = self._video_library.get_all_videos()
-        correct_videos = list(filter(lambda x: search_term.upper() in x.title.upper(), videos))
+        correct_videos = list(filter(lambda x: search_term.upper() in x.title.upper() and self.flags.get(x.video_id, None) == None, videos))
         correct_videos.sort(key = lambda x: x.title.upper())
-        print(f"Here are the search results for {search_term}:")
+        if len(correct_videos) == 0:
+            print(f"No search results for {search_term}")
+            return
+
+        print(f"Here are the results for {search_term}:")
         for i in range(len(correct_videos)):
             print(f"  {i+1}) {correct_videos[i].title} ({correct_videos[i].video_id}) [{get_tags_formatted(correct_videos[i])}]")
+        print("Would you like to play any of the above? If yes, specify the number of the video.")
+        print("If your answer is not a valid number, we will assume it's a no.")
+        
+        user_input = input()
+        try:
+            video_id = correct_videos[int(user_input)-1].video_id
+            self.play_video(video_id)
+        except:
+            pass
         #print("search_videos needs implementation")
 
     def search_videos_tag(self, video_tag):
@@ -244,16 +281,47 @@ class VideoPlayer:
         Args:
             video_tag: The video tag to be used in search.
         """
-        print("search_videos_tag needs implementation")
+        videos = self._video_library.get_all_videos()
+        correct_videos = list(filter(lambda x: video_tag.lower() in x.tags and self.flags.get(x.video_id, None) == None, videos))
+        correct_videos.sort(key = lambda x: x.title.upper())
+        if len(correct_videos) == 0:
+            print(f"No search results for {video_tag}")
+            return
+        
+        print(f"Here are the results for {video_tag}:")
+        for i in range(len(correct_videos)):
+            print(f"  {i+1}) {correct_videos[i].title} ({correct_videos[i].video_id}) [{get_tags_formatted(correct_videos[i])}]")
+        print("Would you like to play any of the above? If yes, specify the number of the video.")
+        print("If your answer is not a valid number, we will assume it's a no.")
+        
+        user_input = input()
+        try:
+            video_id = correct_videos[int(user_input)-1].video_id
+            self.play_video(video_id)
+        except:
+            pass
+        #print("search_videos_tag needs implementation")
 
-    def flag_video(self, video_id, flag_reason=""):
+    ########
+    #PART 4#
+    ########
+    def flag_video(self, video_id, flag_reason="Not supplied"):
         """Mark a video as flagged.
 
         Args:
             video_id: The video_id to be flagged.
             flag_reason: Reason for flagging the video.
         """
-        print("flag_video needs implementation")
+        if self.flags.get(video_id, None) != None:
+            print("Cannot flag video: Video is already flagged")
+        elif self._video_library.get_video(video_id) == None:
+            print("Cannot flag video: Video does not exist")
+        else:
+            if self.currently_playing == video_id:
+                self.stop_video()
+            print(f"Successfully flagged video: {self._video_library.get_video(video_id).title} (reason: {flag_reason})")
+            self.flags[video_id] = flag_reason
+        #print("flag_video needs implementation")
 
     def allow_video(self, video_id):
         """Removes a flag from a video.
@@ -261,4 +329,10 @@ class VideoPlayer:
         Args:
             video_id: The video_id to be allowed again.
         """
-        print("allow_video needs implementation")
+        if self._video_library.get_video(video_id) == None:
+            print("Cannot remove flag from video: Video does not exist")
+        elif self.flags.get(video_id, None) == None:
+            print("Cannot remove flag from video: Video is not flagged")
+        else:
+            print(f"Successfully removed flag from video: {self._video_library.get_video(video_id).title} (reason: {self.flags.pop(video_id)})")
+        #print("allow_video needs implementation")
